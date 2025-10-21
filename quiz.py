@@ -1,6 +1,46 @@
-import streamlit as st
 import random
+from fpdf import FPDF
+import os
+import streamlit as st # st.error를 위해 추가
 
+
+
+# --- PDF 생성 함수 (bytes()로 감싸서 수정) ---
+def create_pdf_report(incorrect_log):
+    pdf = FPDF()
+    pdf.add_page()
+
+    # 한글 폰트 추가
+    font_path = 'NanumGothic.ttf'
+    if os.path.exists(font_path):
+        pdf.add_font('NanumGothic', '', font_path, uni=True)
+        pdf.set_font('NanumGothic', '', 16)
+    else:
+        st.error("NanumGothic.ttf 폰트 파일이 없어 PDF의 한글이 깨질 수 있습니다.")
+        pdf.set_font('Arial', '', 16)
+
+    pdf.cell(0, 10, 'AI 활용능력 퀴즈 - 오답 노트', 0, 1, 'C')
+    pdf.ln(10)
+
+    pdf.set_font_size(12)
+    sorted_log = sorted(incorrect_log, key=lambda x: x['question'])
+
+    for i, item in enumerate(sorted_log):
+        pdf.multi_cell(0, 8, f"문제 {i + 1}: {item['question']}", ln=1)
+        pdf.ln(2)
+
+        pdf.set_font_size(10)
+        pdf.multi_cell(0, 8, f"정답: {item['answer']}", ln=1)
+        pdf.multi_cell(0, 8, f"해설: {item['explanation']}", ln=1)
+        pdf.ln(6)
+
+        pdf.cell(0, 0, '', 'T')
+        pdf.ln(8)
+
+        pdf.set_font_size(12)
+
+    # 수정된 부분: bytes()로 감싸서 Streamlit이 원하는 형식으로 변환
+    return bytes(pdf.output())
 # 퀴즈 데이터 (150문제 전체)
 quiz_data = [
     # 1-10
@@ -1111,12 +1151,9 @@ quiz_data = [
 
 # --- Functions ---
 def initialize_session_state(is_reset=False):
-    """세션 상태를 초기화하거나 리셋하는 함수"""
-    # 오답 노트는 리셋할 때 유지하기 위해 별도 관리
     if 'incorrect_log' not in st.session_state or not is_reset:
         st.session_state.incorrect_log = []
 
-    # 문제/선택지 섞기
     shuffled_questions = random.sample(quiz_data, len(quiz_data))
     for question in shuffled_questions:
         random.shuffle(question['options'])
@@ -1128,7 +1165,6 @@ def initialize_session_state(is_reset=False):
 
 
 def handle_answer(q_index, user_choice):
-    """사용자의 답변을 처리하는 함수"""
     st.session_state.user_answers[q_index] = user_choice
     st.session_state.answered[q_index] = True
     correct_answer = st.session_state.quiz_data[q_index]['answer']
@@ -1140,13 +1176,11 @@ def handle_answer(q_index, user_choice):
 
 
 def go_to_next_question():
-    """다음 문제로 이동하는 함수"""
     if st.session_state.current_index < len(st.session_state.quiz_data) - 1:
         st.session_state.current_index += 1
 
 
 def go_to_previous_question():
-    """이전 문제로 이동하는 함수"""
     if st.session_state.current_index > 0:
         st.session_state.current_index -= 1
 
@@ -1157,12 +1191,11 @@ st.set_page_config(page_title="AI 활용능력 퀴즈", layout="centered")
 if 'quiz_data' not in st.session_state:
     initialize_session_state()
 
-# --- 오답 노트를 위한 사이드바 ---
+# --- Sidebar ---
 st.sidebar.title("📝 오답 노트")
 if not st.session_state.incorrect_log:
     st.sidebar.info("아직 틀린 문제가 없습니다. 완벽해요! ✨")
 else:
-    # 오답노트 정렬을 위해 sorted 사용
     sorted_log = sorted(st.session_state.incorrect_log, key=lambda x: x['question'])
     for i, item in enumerate(sorted_log):
         with st.sidebar.expander(f"**{i + 1}. {item['question'][:30]}...**"):
@@ -1170,20 +1203,27 @@ else:
             st.markdown(f"**정답:** {item['answer']}")
             st.markdown(f"**해설:** {item['explanation']}")
 
-# --- 메인 퀴즈 인터페이스 ---
+    st.sidebar.markdown("---")
+    pdf_bytes = create_pdf_report(st.session_state.incorrect_log)
+    st.sidebar.download_button(
+        label="📄 오답노트 PDF로 다운로드",
+        data=pdf_bytes,
+        file_name="ai_quiz_incorrect_report.pdf",
+        mime="application/pdf",
+    )
+
+# --- Main Quiz Interface ---
 st.title("💡 AI 활용능력 퀴즈")
 
 current_q_index = st.session_state.current_index
 total_questions = len(st.session_state.quiz_data)
 question_item = st.session_state.quiz_data[current_q_index]
 
-# 진행률 표시 및 문제 헤더
 st.progress((current_q_index + 1) / total_questions)
 st.markdown(f"### 문제 {current_q_index + 1}/{total_questions}")
 st.markdown(f"**{question_item['question']}**")
 st.markdown("---")
 
-# 선택지 버튼
 is_answered = st.session_state.answered[current_q_index]
 options = question_item['options']
 
@@ -1199,33 +1239,25 @@ for option in options:
         handle_answer(current_q_index, option)
         st.rerun()
 
-# 답변 후 피드백 표시
 if is_answered:
     user_answer = st.session_state.user_answers[current_q_index]
     correct_answer = question_item['answer']
-
     if user_answer == correct_answer:
         st.success(f"🎉 정답입니다!")
     else:
         st.error(f"❌ 오답입니다. (선택: {user_answer})")
-
     st.info(f"**정답:** {correct_answer}\n\n**해설:** {question_item['explanation']}")
 
-# 네비게이션 버튼
 st.markdown("---")
 col1, col2 = st.columns(2)
-
 with col1:
     st.button("◀ 이전 문제", on_click=go_to_previous_question, use_container_width=True)
-
 with col2:
     st.button("다음 문제 ▶", on_click=go_to_next_question, use_container_width=True)
 
-# 마지막 문제를 풀었을 경우 '다시 풀기' 버튼 표시
 if current_q_index == total_questions - 1 and is_answered:
     st.markdown("---")
     st.balloons()
     if st.button("🎉 퀴즈 완료! 다시 풀기", on_click=initialize_session_state, args=(True,), use_container_width=True,
                  type="primary"):
         pass
-
