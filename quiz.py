@@ -1,16 +1,13 @@
+import streamlit as st
 import random
 from fpdf import FPDF
 import os
-import streamlit as st # st.error를 위해 추가
 
 
-
-# --- PDF 생성 함수 (bytes()로 감싸서 수정) ---
+# --- PDF 생성 함수 ---
 def create_pdf_report(incorrect_log):
     pdf = FPDF()
     pdf.add_page()
-
-    # 한글 폰트 추가
     font_path = 'NanumGothic.ttf'
     if os.path.exists(font_path):
         pdf.add_font('NanumGothic', '', font_path, uni=True)
@@ -18,32 +15,26 @@ def create_pdf_report(incorrect_log):
     else:
         st.error("NanumGothic.ttf 폰트 파일이 없어 PDF의 한글이 깨질 수 있습니다.")
         pdf.set_font('Arial', '', 16)
-
     pdf.cell(0, 10, 'AI 활용능력 퀴즈 - 오답 노트', 0, 1, 'C')
     pdf.ln(10)
-
     pdf.set_font_size(12)
     sorted_log = sorted(incorrect_log, key=lambda x: x['question'])
-
     for i, item in enumerate(sorted_log):
         pdf.multi_cell(0, 8, f"문제 {i + 1}: {item['question']}", ln=1)
         pdf.ln(2)
-
         pdf.set_font_size(10)
         pdf.multi_cell(0, 8, f"정답: {item['answer']}", ln=1)
         pdf.multi_cell(0, 8, f"해설: {item['explanation']}", ln=1)
         pdf.ln(6)
-
         pdf.cell(0, 0, '', 'T')
         pdf.ln(8)
-
         pdf.set_font_size(12)
-
-    # 수정된 부분: bytes()로 감싸서 Streamlit이 원하는 형식으로 변환
     return bytes(pdf.output())
-# 퀴즈 데이터 (150문제 전체)
+
+
+# --- 퀴즈 데이터 (150문제) ---
 quiz_data = [
-    # 1-10
+    # ... (150문제 전체가 여기에 포함되어 있습니다) ...
     {
         "question": "인공지능이 사람의 피드백으로부터 배우는 강화학습 모델을 무엇이라고 하는가?",
         "options": ["RLHF", "Parameter", "GAN", "NLP"],
@@ -757,7 +748,7 @@ quiz_data = [
         "explanation": "ImageFX는 구글의 이미지 생성 모델인 Imagen 2를 기반으로 하며, 사용자가 입력한 텍스트 프롬프트를 시각적인 이미지 콘텐츠로 만들어주는 서비스입니다."
     },
     {
-        "question": "구글의 이미지 생성 도구인 ImageFX에 대한 설명 중, 사실과 가장 거리가 먼 것은?",
+        "question": "구글의 이미지 생성 도구인 ImageFX에 대한 설명 중, 사실과 거리가 먼 것은?",
         "options": [
             "구글이 개발한 강력한 이미지 생성 모델인 'Imagen 2' 기술을 기반으로 작동한다.",
             "사용자의 프롬프트를 분석하여 더 나은 결과물을 제안하는 '표현 칩' 같은 보조 기능이 있다.",
@@ -853,7 +844,7 @@ quiz_data = [
             "AI와 인간의 상호작용을 방해하기 위해서이다."
         ],
         "answer": "AI가 무작위로 반응하는 것을 방지하기 위해서이다.",
-        "explanation": "명확한 프롬프팅은 AI가 사용자의 질문이나 요구를 올바르게 이해하고 적절하게 반응하도록 유도하여, 무작위적이거나 관련 없는 답변을 하는 것을 방지합니다."
+        "explanation": "명확한 프롬프팅은 AI가 사용자의 질문이나 요구를 올르게 이해하고 적절하게 반응하도록 유도하여, 무작위적이거나 관련 없는 답변을 하는 것을 방지합니다."
     },
     {
         "question": "생성형 AI를 활용한 프롬프트 엔지니어링의 기대성과 중 하나는 무엇인가요?",
@@ -1149,115 +1140,252 @@ quiz_data = [
 ]
 
 
-# --- Functions ---
-def initialize_session_state(is_reset=False):
-    if 'incorrect_log' not in st.session_state or not is_reset:
+# --- 상태 관리 및 함수 정의 ---
+
+def initialize_app(mode):
+    """지정된 모드에 맞게 앱 상태를 초기화하는 함수"""
+    st.session_state.mode = mode
+    st.session_state.current_index = 0
+    if 'incorrect_log' not in st.session_state:
         st.session_state.incorrect_log = []
 
-    shuffled_questions = random.sample(quiz_data, len(quiz_data))
-    for question in shuffled_questions:
-        random.shuffle(question['options'])
+    if mode == 'practice':
+        # 학습 모드: 150문제 전체
+        quiz_subset = quiz_data
+        st.session_state.total_questions = len(quiz_subset)
+    elif mode == 'test':
+        # 실전 모드: 50문제 랜덤 추출
+        quiz_subset = random.sample(quiz_data, 50)
+        st.session_state.total_questions = 50
+
+    # 문제와 선택지 순서 섞기
+    shuffled_questions = random.sample(quiz_subset, len(quiz_subset))
+    for q in shuffled_questions:
+        random.shuffle(q['options'])
 
     st.session_state.quiz_data = shuffled_questions
-    st.session_state.current_index = 0
-    st.session_state.user_answers = [None] * len(quiz_data)
-    st.session_state.answered = [False] * len(quiz_data)
+    st.session_state.user_answers = [None] * len(shuffled_questions)
+    st.session_state.answered = [False] * len(shuffled_questions)
 
 
-def handle_answer(q_index, user_choice):
-    st.session_state.user_answers[q_index] = user_choice
-    st.session_state.answered[q_index] = True
-    correct_answer = st.session_state.quiz_data[q_index]['answer']
-    if user_choice != correct_answer:
-        question_info = st.session_state.quiz_data[q_index]
-        is_already_logged = any(d['question'] == question_info['question'] for d in st.session_state.incorrect_log)
-        if not is_already_logged:
-            st.session_state.incorrect_log.append(question_info)
+def go_to_main_menu():
+    """메인 메뉴로 돌아가는 함수"""
+    st.session_state.mode = 'main_menu'
 
 
-def go_to_next_question():
-    if st.session_state.current_index < len(st.session_state.quiz_data) - 1:
-        st.session_state.current_index += 1
+# --- UI 렌더링 함수 ---
+
+def render_main_menu():
+    """메인 선택 화면을 렌더링하는 함수"""
+    st.title("💡 AI 활용능력 퀴즈")
+    st.markdown("---")
+    st.subheader("원하는 모드를 선택하세요.")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("📚 학습 모드 시작", use_container_width=True, help="150문제 전체를 풀어보며 학습합니다. 정답과 해설이 바로 제공됩니다."):
+            initialize_app('practice')
+            st.rerun()
+    with col2:
+        if st.button("⏱️ 실전 모의고사 시작", type="primary", use_container_width=True,
+                     help="150문제 중 50문제를 랜덤으로 풀어 실력을 테스트합니다."):
+            initialize_app('test')
+            st.rerun()
 
 
-def go_to_previous_question():
-    if st.session_state.current_index > 0:
-        st.session_state.current_index -= 1
+def render_practice_mode():
+    """학습 모드 UI를 렌더링하는 함수"""
+    st.title("📚 학습 모드")
+
+    q_index = st.session_state.current_index
+    total_q = st.session_state.total_questions
+    item = st.session_state.quiz_data[q_index]
+
+    st.progress((q_index + 1) / total_q)
+    st.markdown(f"### 문제 {q_index + 1}/{total_q}")
+    st.markdown(f"**{item['question']}**")
+    st.markdown("---")
+
+    is_answered = st.session_state.answered[q_index]
+    for option in item['options']:
+        button_key = f"practice_{q_index}_{option.replace(' ', '_')}"
+        button_type = "secondary"
+        if is_answered and option == item['answer']:
+            button_type = "primary"
+
+        if st.button(option, key=button_key, use_container_width=True, disabled=is_answered, type=button_type):
+            st.session_state.user_answers[q_index] = option
+            st.session_state.answered[q_index] = True
+            if option != item['answer']:
+                if not any(d['question'] == item['question'] for d in st.session_state.incorrect_log):
+                    st.session_state.incorrect_log.append(item)
+            st.rerun()
+
+    if is_answered:
+        user_answer = st.session_state.user_answers[q_index]
+        if user_answer == item['answer']:
+            st.success("🎉 정답입니다!")
+        else:
+            st.error(f"❌ 오답입니다. (선택: {user_answer})")
+        st.info(f"**정답:** {item['answer']}\n\n**해설:** {item['explanation']}")
+
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 1, 2])
+    if col1.button("◀ 이전 문제", use_container_width=True):
+        if q_index > 0:
+            st.session_state.current_index -= 1
+            st.rerun()
+    if col2.button("다음 문제 ▶", use_container_width=True):
+        if q_index < total_q - 1:
+            st.session_state.current_index += 1
+            st.rerun()
+
+    if q_index == total_q - 1 and is_answered:
+        st.balloons()
+        if st.button("🎉 학습 완료! 메인 메뉴로", use_container_width=True, type="primary"):
+            go_to_main_menu()
+            st.rerun()
 
 
-# --- UI Rendering ---
-st.set_page_config(page_title="AI 활용능력 퀴즈", layout="centered")
+# ==========================================================
+# ===== 여기가 수정된 함수입니다 =====
+# ==========================================================
+def render_test_mode():
+    """실전 모의고사 UI를 렌더링하는 함수 (이전/다음 버튼 수정)"""
+    st.title("⏱️ 실전 모의고사")
 
-if 'quiz_data' not in st.session_state:
-    initialize_session_state()
+    q_index = st.session_state.current_index
+    total_q = st.session_state.total_questions
+    item = st.session_state.quiz_data[q_index]
 
-# --- Sidebar ---
-st.sidebar.title("📝 오답 노트")
-if not st.session_state.incorrect_log:
-    st.sidebar.info("아직 틀린 문제가 없습니다. 완벽해요! ✨")
-else:
-    sorted_log = sorted(st.session_state.incorrect_log, key=lambda x: x['question'])
-    for i, item in enumerate(sorted_log):
-        with st.sidebar.expander(f"**{i + 1}. {item['question'][:30]}...**"):
-            st.markdown(f"**문제:** {item['question']}")
-            st.markdown(f"**정답:** {item['answer']}")
-            st.markdown(f"**해설:** {item['explanation']}")
+    st.progress((q_index + 1) / total_q)
+    st.markdown(f"### 문제 {q_index + 1}/{total_q}")
+    st.markdown(f"**{item['question']}**")
 
-    st.sidebar.markdown("---")
-    pdf_bytes = create_pdf_report(st.session_state.incorrect_log)
-    st.sidebar.download_button(
-        label="📄 오답노트 PDF로 다운로드",
-        data=pdf_bytes,
-        file_name="ai_quiz_incorrect_report.pdf",
-        mime="application/pdf",
+    options = item['options']
+
+    # --- [수정된 부분 1] ---
+    # 사용자가 이전에 선택한 답변이 있다면 그 값을 index로 사용
+    current_answer = st.session_state.user_answers[q_index]
+    default_index = None
+    if current_answer in options:
+        default_index = options.index(current_answer)
+
+    user_answer = st.radio(
+        "정답을 선택하세요:",
+        options,
+        key=f"test_{q_index}",
+        index=default_index  # 기존 'index=None'에서 수정
     )
+    # --- [수정 끝 1] ---
 
-# --- Main Quiz Interface ---
-st.title("💡 AI 활용능력 퀴즈")
+    st.session_state.user_answers[q_index] = user_answer
 
-current_q_index = st.session_state.current_index
-total_questions = len(st.session_state.quiz_data)
-question_item = st.session_state.quiz_data[current_q_index]
+    st.markdown("---")
 
-st.progress((current_q_index + 1) / total_questions)
-st.markdown(f"### 문제 {current_q_index + 1}/{total_questions}")
-st.markdown(f"**{question_item['question']}**")
-st.markdown("---")
+    # --- [수정된 부분 2] ---
+    # '이전' / '다음' / '제출' 버튼 로직
+    col1, col2 = st.columns(2)
 
-is_answered = st.session_state.answered[current_q_index]
-options = question_item['options']
+    with col1:
+        # 첫 번째 문제가 아니면 '이전 문제' 버튼 활성화
+        if q_index > 0:
+            if st.button("◀ 이전 문제", use_container_width=True):
+                st.session_state.current_index -= 1
+                st.rerun()
+        else:
+            # 첫 번째 문제일 경우 버튼을 비활성화하여 자리 유지
+            st.button("◀ 이전 문제", use_container_width=True, disabled=True)
 
-for option in options:
-    button_key = f"q{current_q_index}_{option.replace(' ', '_')}"
-    is_correct_option = (option == question_item['answer'])
+    with col2:
+        # 마지막 문제가 아니면 '다음 문제' 버튼 표시
+        if q_index < total_q - 1:
+            if st.button("다음 문제 ▶", use_container_width=True):
+                st.session_state.current_index += 1
+                st.rerun()
+        # 마지막 문제이면 '결과 보기 제출' 버튼 표시
+        else:
+            if st.button("결과 보기  제출", use_container_width=True, type="primary"):
+                st.session_state.mode = 'result'
+                st.rerun()
+    # --- [수정 끝 2] ---
 
-    button_type = "secondary"
-    if is_answered and is_correct_option:
-        button_type = "primary"
 
-    if st.button(option, key=button_key, use_container_width=True, disabled=is_answered, type=button_type):
-        handle_answer(current_q_index, option)
+# ==========================================================
+# ==========================================================
+
+
+def render_result_page():
+    """결과 화면을 렌더링하는 함수"""
+    st.title("🏆 모의고사 결과")
+
+    correct_count = 0
+    for i, item in enumerate(st.session_state.quiz_data):
+        user_answer = st.session_state.user_answers[i]
+        correct_answer = item['answer']
+        if user_answer == correct_answer:
+            correct_count += 1
+        else:
+            # 오답 노트에 추가
+            if not any(d['question'] == item['question'] for d in st.session_state.incorrect_log):
+                st.session_state.incorrect_log.append(item)
+
+    score = correct_count * 2
+
+    st.subheader(f"총점: **:blue[{score}]** / 100")
+    st.progress(score)
+
+    if score >= 60:
+        st.success("🎉 **축하합니다! 합격입니다.**")
+        st.balloons()
+    else:
+        st.error("벌레 탈출 해야죠. 더 공부하세요! 💪")
+
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    if col1.button("모의고사 다시 풀기", use_container_width=True):
+        initialize_app('test')
+        st.rerun()
+    if col2.button("메인 메뉴로 돌아가기", use_container_width=True, type="primary"):
+        go_to_main_menu()
         st.rerun()
 
-if is_answered:
-    user_answer = st.session_state.user_answers[current_q_index]
-    correct_answer = question_item['answer']
-    if user_answer == correct_answer:
-        st.success(f"🎉 정답입니다!")
+
+# --- 메인 앱 로직 ---
+
+st.set_page_config(page_title="AI 활용능력 퀴즈", layout="centered")
+
+# 사이드바 렌더링 (오답노트)
+with st.sidebar:
+    st.title("📝 오답 노트")
+    if 'incorrect_log' not in st.session_state or not st.session_state.incorrect_log:
+        st.info("아직 틀린 문제가 없습니다. 완벽해요! ✨")
     else:
-        st.error(f"❌ 오답입니다. (선택: {user_answer})")
-    st.info(f"**정답:** {correct_answer}\n\n**해설:** {question_item['explanation']}")
+        sorted_log = sorted(st.session_state.incorrect_log, key=lambda x: x['question'])
+        for i, item in enumerate(sorted_log):
+            with st.expander(f"**{i + 1}. {item['question'][:30]}...**"):
+                st.markdown(f"**문제:** {item['question']}")
+                st.markdown(f"**정답:** {item['answer']}")
+                st.markdown(f"**해설:** {item['explanation']}")
 
-st.markdown("---")
-col1, col2 = st.columns(2)
-with col1:
-    st.button("◀ 이전 문제", on_click=go_to_previous_question, use_container_width=True)
-with col2:
-    st.button("다음 문제 ▶", on_click=go_to_next_question, use_container_width=True)
+        st.markdown("---")
+        pdf_bytes = create_pdf_report(st.session_state.incorrect_log)
+        st.download_button(
+            label="📄 오답노트 PDF로 다운로드",
+            data=pdf_bytes,
+            file_name="ai_quiz_incorrect_report.pdf",
+            mime="application/pdf",
+        )
 
-if current_q_index == total_questions - 1 and is_answered:
-    st.markdown("---")
-    st.balloons()
-    if st.button("🎉 퀴즈 완료! 다시 풀기", on_click=initialize_session_state, args=(True,), use_container_width=True,
-                 type="primary"):
-        pass
+# 현재 모드에 따라 적절한 UI 렌더링
+if 'mode' not in st.session_state:
+    st.session_state.mode = 'main_menu'
+
+if st.session_state.mode == 'main_menu':
+    render_main_menu()
+elif st.session_state.mode == 'practice':
+    render_practice_mode()
+elif st.session_state.mode == 'test':
+    render_test_mode()
+elif st.session_state.mode == 'result':
+    render_result_page()
