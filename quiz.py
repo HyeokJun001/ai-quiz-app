@@ -1336,10 +1336,10 @@ def render_result_page():
     st.progress(score)
 
     if score >= 60:
-        st.success("🎉 **축하합니다! 합격입니다.**")
+        st.success("🎉 **축하합니다! 합격입니다.** 메인메뉴로 돌아가기를 누르면 오답이 기록됩니다.")
         st.balloons()
     else:
-        st.error("벌레 탈출 해야죠. 더 공부하세요! 💪")
+        st.error("벌레 탈출 해야죠. 더 공부하세요! 💪 메인메뉴로 돌아가기를 누르면 오답이 기록됩니다.")
 
     st.markdown("---")
     col1, col2 = st.columns(2)
